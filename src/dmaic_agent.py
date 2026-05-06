@@ -42,8 +42,10 @@ load_dotenv()
 # 1. MODELOS DE DATOS (Pydantic) - La "Verdad de Hierro"
 # ---------------------------------------------------------------------------
 
+
 class DefectRecord(BaseModel):
     """Esquema inmutable para cada registro de defecto."""
+
     timestamp: str
     product_id: str
     defect_type: str = Field(..., description="Ej: SolderBridge, MissingComponent, Offset")
@@ -53,15 +55,19 @@ class DefectRecord(BaseModel):
     specification_limit_low: float | None = None
     specification_limit_high: float | None = None
 
+
 class ProcessSpec(BaseModel):
     """Especificaciones del proceso cargadas desde JSON."""
+
     target: float
     lsl: float  # Lower Specification Limit
     usl: float  # Upper Specification Limit
 
+
 # ---------------------------------------------------------------------------
 # 2. FASE MEASURE - Cálculo de Capacidad de Proceso (Cpk)
 # ---------------------------------------------------------------------------
+
 
 def calculate_cpk(data: pd.Series, lsl: float, usl: float) -> dict:
     """Calcula Cp, Cpk y retorna un dict con el análisis."""
@@ -73,7 +79,7 @@ def calculate_cpk(data: pd.Series, lsl: float, usl: float) -> dict:
             "cpk": 0,
             "mean": mean,
             "std_dev": std_dev,
-            "status": "ERROR: No variation"
+            "status": "ERROR: No variation",
         }
     cp = (usl - lsl) / (6 * std_dev)
     cpk = min((mean - lsl) / (3 * std_dev), (usl - mean) / (3 * std_dev))
@@ -87,9 +93,11 @@ def calculate_cpk(data: pd.Series, lsl: float, usl: float) -> dict:
         "sigma_level": round(cpk * 3, 2),
     }
 
+
 # ---------------------------------------------------------------------------
 # 3. FASE ANALYZE - Búsqueda de Causa Raíz con sqlite-vec (sin alucinación)
 # ---------------------------------------------------------------------------
+
 
 class RootCauseEngine:
     """Busca causas raíz en una base de conocimiento vectorizada de defectos históricos."""
@@ -103,6 +111,7 @@ class RootCauseEngine:
         conn = sqlite3.connect(self.db_path)
         conn.enable_load_extension(True)
         import sqlite_vec
+
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
         conn.execute("""
@@ -128,13 +137,13 @@ class RootCauseEngine:
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO defects (defect_type, root_cause, solution, embedding) VALUES (?,?,?,?)",
-            (defect_type, root_cause, solution, json.dumps(embedding))
+            (defect_type, root_cause, solution, json.dumps(embedding)),
         )
         rowid = cur.lastrowid
         # También poblar la tabla de vectores
         cur.execute(
             "INSERT INTO vec_defects (rowid, embedding) VALUES (?,?)",
-            (rowid, json.dumps(embedding))
+            (rowid, json.dumps(embedding)),
         )
         conn.commit()
         conn.close()
@@ -143,16 +152,20 @@ class RootCauseEngine:
         conn = sqlite3.connect(self.db_path)
         conn.enable_load_extension(True)
         import sqlite_vec
+
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
         cur = conn.cursor()
-        cur.execute("""
+        cur.execute(
+            """
             SELECT d.defect_type, d.root_cause, d.solution, v.distance
             FROM vec_defects v
             JOIN defects d ON v.rowid = d.id
             WHERE v.embedding MATCH ? AND k = ?
             ORDER BY v.distance ASC
-        """, (json.dumps(query_embedding), top_k))
+        """,
+            (json.dumps(query_embedding), top_k),
+        )
         results = [
             {
                 "defect_type": row[0],
@@ -165,9 +178,11 @@ class RootCauseEngine:
         conn.close()
         return results
 
+
 # ---------------------------------------------------------------------------
 # 4. SÍNTESIS FINAL (Usa LLM, pero anclado a los datos)
 # ---------------------------------------------------------------------------
+
 
 def generate_report(
     defect_summary: dict,
@@ -180,19 +195,19 @@ def generate_report(
     report = f"""# Sigma-Zero DMAIC Report
 
 ## 1. 📋 Define Phase
-**Top Defect:** {defect_summary['top_defect']} ({defect_summary['count']} \
-ocurrencias, {defect_summary['percentage']}%)
+**Top Defect:** {defect_summary["top_defect"]} ({defect_summary["count"]} \
+ocurrencias, {defect_summary["percentage"]}%)
 
-**Problem Statement:** Línea {defect_summary['primary_line']} presenta una tasa de defectos de \
-{defect_summary['dpu']} DPU en el turno {defect_summary['primary_shift']}, \
+**Problem Statement:** Línea {defect_summary["primary_line"]} presenta una tasa de defectos de \
+{defect_summary["dpu"]} DPU en el turno {defect_summary["primary_shift"]}, \
 excediendo el límite aceptable de calidad.
 
 ## 2. 📊 Measure Phase
-**Process Capability (Cpk):** {cpk_results['cpk']} (Sigma Level: {cpk_results['sigma_level']})
-**Status:** {cpk_results['status']}
-**Mean:** {cpk_results['mean']} | **Std Dev:** {cpk_results['std_dev']}
+**Process Capability (Cpk):** {cpk_results["cpk"]} (Sigma Level: {cpk_results["sigma_level"]})
+**Status:** {cpk_results["status"]}
+**Mean:** {cpk_results["mean"]} | **Std Dev:** {cpk_results["std_dev"]}
 
-El proceso {"es" if cpk_results['cpk'] >= 1.33 else "NO es"} capaz de cumplir con las \
+El proceso {"es" if cpk_results["cpk"] >= 1.33 else "NO es"} capaz de cumplir con las \
 especificaciones.
 
 ## 3. 🔍 Analyze Phase
@@ -207,14 +222,16 @@ especificaciones.
     report += f"\n![Pareto Chart]({pareto_chart_path})\n"
     return report
 
+
 # ---------------------------------------------------------------------------
 # 5. ORQUESTADOR PRINCIPAL
 # ---------------------------------------------------------------------------
 
+
 def run_dmaic(
     input_csv: str,
     spec_json: str = "data/process_spec.json",
-    db_path: str = "knowledge/defect_memory.sqlite"
+    db_path: str = "knowledge/defect_memory.sqlite",
 ):
     # 5.1 Cargar y validar datos
     df = pd.read_csv(input_csv)
@@ -226,35 +243,39 @@ def run_dmaic(
         sys.exit(1)
 
     # 5.2 Fase Define: Pareto de defectos
-    defect_counts = df['defect_type'].value_counts()
+    defect_counts = df["defect_type"].value_counts()
     top_defect = defect_counts.index[0]
     top_count = int(defect_counts.iloc[0])
     total = len(df)
-    pareto_data = pd.DataFrame({
-        'Defect': defect_counts.index,
-        'Count': defect_counts.values,
-        'Percentage': (defect_counts.values / total * 100).round(1)
-    })
-    fig = px.bar(pareto_data, x='Defect', y='Count', title="Pareto de Defectos")
+    pareto_data = pd.DataFrame(
+        {
+            "Defect": defect_counts.index,
+            "Count": defect_counts.values,
+            "Percentage": (defect_counts.values / total * 100).round(1),
+        }
+    )
+    fig = px.bar(pareto_data, x="Defect", y="Count", title="Pareto de Defectos")
     pareto_path = "output/pareto_chart.html"
     fig.write_html(pareto_path)
 
     # 5.3 Fase Measure: Capacidad de proceso
-    if 'measured_value' in df.columns and df['measured_value'].notna().any():
+    if "measured_value" in df.columns and df["measured_value"].notna().any():
         with Path(spec_json).open() as f:
             spec = ProcessSpec(**json.load(f))
-        measurements = df['measured_value'].dropna()
+        measurements = df["measured_value"].dropna()
         cpk_results = calculate_cpk(measurements, spec.lsl, spec.usl)
     else:
         cpk_results = {"cp": 0, "cpk": 0, "sigma_level": 0, "status": "Sin datos numéricos"}
 
     # 5.4 Fase Analyze: Búsqueda de causa raíz
     engine = RootCauseEngine(db_path)
+
     # Generar embedding simulado (en producción usarías la API de embeddings)
     def get_embedding(text: str) -> list[float]:
         # Placeholder: en producción, llama a vromlix.get_embeddings(text)
         seed = int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32 - 1)
         return np.random.RandomState(seed).rand(768).tolist()
+
     query_emb = get_embedding(f"{top_defect} {cpk_results.get('status', '')}")
     root_causes = engine.search(query_emb)
 
@@ -263,9 +284,9 @@ def run_dmaic(
         "top_defect": top_defect,
         "count": top_count,
         "percentage": round(top_count / total * 100, 1),
-        "dpu": round(total / df['product_id'].nunique(), 2),
-        "primary_line": df['line_id'].mode()[0],
-        "primary_shift": df['shift'].mode()[0],
+        "dpu": round(total / df["product_id"].nunique(), 2),
+        "primary_line": df["line_id"].mode()[0],
+        "primary_shift": df["shift"].mode()[0],
     }
     report_md = generate_report(summary, cpk_results, root_causes, "pareto_chart.html")
     output_path = Path("output/dmaic_report.md")
@@ -273,6 +294,7 @@ def run_dmaic(
     output_path.write_text(report_md)
     print(f"✅ Reporte generado: {output_path}")
     print(f"📊 Pareto chart: {pareto_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sigma-Zero DMAIC Agent")

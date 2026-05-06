@@ -16,16 +16,19 @@ import numpy as np
 
 DB_PATH = "knowledge/defect_memory.sqlite"
 
+
 def get_embedding(text: str) -> list[float]:
     """Genera un embedding determinista (simulado) para pruebas."""
     seed = int(hashlib.md5(text.encode()).hexdigest(), 16) % (2**32 - 1)
     return np.random.RandomState(seed).rand(768).tolist()
+
 
 def init_db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.enable_load_extension(True)
     import sqlite_vec
+
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
 
@@ -42,6 +45,7 @@ def init_db():
     conn.commit()
     return conn
 
+
 def seed_data(conn):
     historical_defects = [
         {
@@ -49,22 +53,22 @@ def seed_data(conn):
             "root_cause": "Exceso de pasta de soldadura en stencil debido a presión irregular "
             "de la racleta.",
             "solution": "Calibrar presión de racleta a 5kg y limpiar stencil cada 50 ciclos.",
-            "text_for_embedding": "SolderBridge WARNING"
+            "text_for_embedding": "SolderBridge WARNING",
         },
         {
             "defect_type": "MissingComponent",
             "root_cause": "Falla en el alimentador (feeder) de la máquina Pick&Place por "
             "desgaste mecánico.",
             "solution": "Reemplazar engranes del feeder #4 y recalibrar pitch de avance.",
-            "text_for_embedding": "MissingComponent CRITICAL"
+            "text_for_embedding": "MissingComponent CRITICAL",
         },
         {
             "defect_type": "Offset",
             "root_cause": "Desalineación óptica en la cámara de centrado inferior de "
             "la Pick&Place.",
             "solution": "Ejecutar rutina de calibración óptica y limpiar lente.",
-            "text_for_embedding": "Offset OK"
-        }
+            "text_for_embedding": "Offset OK",
+        },
     ]
 
     cur = conn.cursor()
@@ -76,16 +80,16 @@ def seed_data(conn):
         emb = get_embedding(d["text_for_embedding"])
         cur.execute(
             "INSERT INTO defects (defect_type, root_cause, solution, embedding) VALUES (?,?,?,?)",
-            (d["defect_type"], d["root_cause"], d["solution"], json.dumps(emb))
+            (d["defect_type"], d["root_cause"], d["solution"], json.dumps(emb)),
         )
         rowid = cur.lastrowid
         cur.execute(
-            "INSERT INTO vec_defects (rowid, embedding) VALUES (?,?)",
-            (rowid, json.dumps(emb))
+            "INSERT INTO vec_defects (rowid, embedding) VALUES (?,?)", (rowid, json.dumps(emb))
         )
 
     conn.commit()
     print(f"✅ Conocimiento histórico insertado en {DB_PATH}")
+
 
 if __name__ == "__main__":
     conn = init_db()
