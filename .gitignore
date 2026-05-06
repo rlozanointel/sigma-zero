@@ -1,0 +1,10 @@
+# Entorno
+.env
+.venv
+__pycache__/
+
+# Output
+output/
+
+# Base de datos (ignorarla dependerá de si quieres enviar datos semilla o no, pero por seguridad y peso, se suele ignorar, o solo enviar el schema)
+knowledge/
