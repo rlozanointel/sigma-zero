@@ -14,7 +14,7 @@ uv run src/seed_knowledge.py
 
 echo ""
 echo "[2/3] Ejecutando Orquestador DMAIC Agent..."
-uv run src/dmaic_agent.py --input data/sample_defects.csv --spec data/process_spec.json --db knowledge/defect_memory.sqlite
+uv run main.py --input data/sample_defects.csv --spec data/process_spec.json --db knowledge/defect_memory.sqlite
 
 echo ""
 echo "[3/3] Demo Finalizado."
